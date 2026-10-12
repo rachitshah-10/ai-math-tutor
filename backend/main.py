@@ -105,6 +105,15 @@ async def create_attempt(payload: schemas.CreateAttemptRequest):
     }
 
 
+@app.get("/api/attempts")
+async def list_attempts_summary():
+    """
+    Retrieve completed attempt summary mapped by topic_id.
+    Synchronizes client-side UI with true database state.
+    """
+    return database.fetch_completed_attempts_summary()
+
+
 @app.get("/api/attempts/{attempt_id}")
 async def get_attempt_status(attempt_id: str):
     """
@@ -215,6 +224,18 @@ async def get_attempt_evaluations(attempt_id: str):
         "total_score": attempt["total_score"],
         "max_score": attempt["max_score"],
         "evaluations": evaluations
+    }
+
+
+@app.delete("/api/attempts")
+@app.post("/api/attempts/clear")
+async def clear_all_attempts():
+    """Clear all past student attempts and evaluations from the database."""
+    stats = database.clear_all_attempts()
+    return {
+        "status": "ok",
+        "message": "All past attempts and evaluations cleared successfully.",
+        **stats
     }
 
 

@@ -454,3 +454,50 @@ def complete_attempt(attempt_id: str, total_score: int) -> None:
         conn.commit()
 
 
+def clear_all_attempts() -> Dict[str, int]:
+    """Delete all attempts and associated evaluations from the database."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM attempts;")
+        attempts_count = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) FROM evaluations;")
+        evals_count = cursor.fetchone()[0]
+
+        cursor.execute("DELETE FROM evaluations;")
+        cursor.execute("DELETE FROM attempts;")
+        conn.commit()
+        return {
+            "attempts_deleted": attempts_count,
+            "evaluations_deleted": evals_count
+        }
+
+
+def fetch_completed_attempts_summary() -> Dict[str, Dict[str, Any]]:
+    """Return dictionary of latest completed attempt per topic."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, topic_id, total_score, max_score, completed
+            FROM attempts
+            WHERE completed = 1
+            ORDER BY rowid DESC;
+        """)
+        rows = cursor.fetchall()
+        summary = {}
+        for r in rows:
+            topic_id = r["topic_id"]
+            if topic_id not in summary:
+                max_score = r["max_score"]
+                score = r["total_score"]
+                percentage = round((score / max_score * 100), 1) if max_score > 0 else 0
+                summary[topic_id] = {
+                    "topicId": topic_id,
+                    "attemptId": r["id"],
+                    "score": score,
+                    "maxScore": max_score,
+                    "percentage": percentage
+                }
+        return summary
+
+
+

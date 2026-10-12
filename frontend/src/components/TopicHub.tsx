@@ -1,3 +1,9 @@
+/**
+ * TopicHub Component.
+ * Displays pre-populated curriculum topic cards with difficulty,
+ * question counts, and past performance badges.
+ */
+
 import React from 'react';
 import { Topic, PastScore } from '../types';
 
@@ -6,6 +12,7 @@ interface TopicHubProps {
   pastScores: Record<string, PastScore>;
   onSelectTopic: (topic: Topic) => void;
   onReviewPastAttempt?: (attemptId: string) => void;
+  onClearHistory?: () => void;
 }
 
 export const TopicHub: React.FC<TopicHubProps> = ({
@@ -13,11 +20,13 @@ export const TopicHub: React.FC<TopicHubProps> = ({
   pastScores,
   onSelectTopic,
   onReviewPastAttempt,
+  onClearHistory,
 }) => {
   const [levelFilter, setLevelFilter] = React.useState<'all' | 'high' | 'foundations'>('all');
 
   const highSchoolCount = topics.filter((t) => t.difficulty.toLowerCase().includes('grade')).length;
   const foundationsCount = topics.length - highSchoolCount;
+  const hasPastAttempts = Object.keys(pastScores).length > 0;
 
   const filteredTopics = topics.filter((t) => {
     const isHigh = t.difficulty.toLowerCase().includes('grade');
@@ -29,10 +38,11 @@ export const TopicHub: React.FC<TopicHubProps> = ({
   return (
     <div>
       <div className="hero-banner">
-        <h1>InkMath</h1>
+        <div className="hero-eyebrow">✦ MATHEMATICAL ATELIER &amp; SCRATCHPAD</div>
+        <h1>The Art of Mathematical <em>Reasoning</em></h1>
         <p>
-          Solve math naturally on an interactive scratchpad. Write out your steps,
-          sketch geometry figures, and get instant step-by-step AI marking.
+          Solve problems naturally by hand on an interactive drafting canvas.
+          Write out your steps, sketch geometric proofs, and receive instant multimodal AI vision marking.
         </p>
       </div>
 
@@ -55,6 +65,17 @@ export const TopicHub: React.FC<TopicHubProps> = ({
         >
           🌱 Foundations ({foundationsCount})
         </button>
+
+        {hasPastAttempts && onClearHistory && (
+          <button
+            className="filter-btn"
+            style={{ color: 'var(--danger)', borderColor: 'rgba(248, 113, 113, 0.3)' }}
+            onClick={onClearHistory}
+            title="Clear all past attempts and local scores"
+          >
+            🗑️ Clear History
+          </button>
+        )}
       </div>
 
       <div className="topic-grid">
@@ -119,3 +140,4 @@ export const TopicHub: React.FC<TopicHubProps> = ({
     </div>
   );
 };
+
