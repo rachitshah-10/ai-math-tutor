@@ -193,174 +193,6 @@ def seed_default_assignments() -> None:
                 }
             ]
         },
-    ]
-
-    with get_connection() as conn:
-        cursor = conn.cursor()
-
-        # Topics catalog
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS topics (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                description TEXT NOT NULL,
-                icon TEXT NOT NULL,
-                difficulty TEXT NOT NULL,
-                question_count INTEGER NOT NULL
-            );
-        """)
-
-        # Questions bank
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS questions (
-                id TEXT PRIMARY KEY,
-                topic_id TEXT NOT NULL,
-                order_index INTEGER NOT NULL,
-                prompt TEXT NOT NULL,
-                topic TEXT NOT NULL,
-                max_points INTEGER NOT NULL,
-                hint TEXT,
-                rubric_solution TEXT NOT NULL,
-                FOREIGN KEY (topic_id) REFERENCES topics (id)
-            );
-        """)
-
-        # Student assignment attempts
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS attempts (
-                id TEXT PRIMARY KEY,
-                topic_id TEXT NOT NULL,
-                total_score INTEGER DEFAULT 0,
-                max_score INTEGER DEFAULT 0,
-                completed INTEGER DEFAULT 0,
-                created_at TEXT NOT NULL,
-                completed_at TEXT,
-                FOREIGN KEY (topic_id) REFERENCES topics (id)
-            );
-        """)
-
-        # Per-question student submissions and AI evaluations
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS evaluations (
-                id TEXT PRIMARY KEY,
-                attempt_id TEXT NOT NULL,
-                question_id TEXT NOT NULL,
-                image_data TEXT NOT NULL,
-                status TEXT NOT NULL,
-                score INTEGER DEFAULT 0,
-                max_points INTEGER NOT NULL,
-                transcription TEXT,
-                step_analysis TEXT,
-                suggestions TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                FOREIGN KEY (attempt_id) REFERENCES attempts (id),
-                FOREIGN KEY (question_id) REFERENCES questions (id)
-            );
-        """)
-
-        conn.commit()
-
-    # Seed pre-populated assignments
-    seed_default_assignments()
-
-
-def seed_default_assignments() -> None:
-    """
-    Seed standard curriculum assignments across Geometry, Fractions, and Algebra.
-    Ensures the application launches with interactive content immediately.
-    """
-    topics_seed = [
-        {
-            "id": "geometry-angles",
-            "title": "Geometry: Angles & Shapes",
-            "description": "Triangle angle sums, right-angle properties, and rectangle dimensions.",
-            "icon": "📐",
-            "difficulty": "Intermediate",
-            "questions": [
-                {
-                    "id": "geo-q1",
-                    "order_index": 1,
-                    "prompt": "In triangle ABC, angle A = 50° and angle B = 65°. Find the measure of angle C.",
-                    "topic": "Triangle Angle Sum",
-                    "max_points": 10,
-                    "hint": "The interior angles of any triangle always add up to 180°.",
-                    "rubric_solution": "1. Sum of known angles: 50° + 65° = 115°. 2. Interior angle sum: 180° - 115° = 65°. Final: Angle C = 65°."
-                },
-                {
-                    "id": "geo-q2",
-                    "order_index": 2,
-                    "prompt": "A right-angled triangle has legs of length 3 cm and 4 cm. Find the length of the hypotenuse c using the Pythagorean theorem.",
-                    "topic": "Pythagorean Theorem",
-                    "max_points": 10,
-                    "hint": "Recall that a² + b² = c².",
-                    "rubric_solution": "1. Formula: a² + b² = c². 2. Substitute: 3² + 4² = 9 + 16 = 25. 3. Square root: c = √25 = 5 cm."
-                },
-                {
-                    "id": "geo-q3",
-                    "order_index": 3,
-                    "prompt": "Calculate the area of a rectangle with length 8 cm and width 5 cm. Draw the shape and write out your steps.",
-                    "topic": "Area of Rectangles",
-                    "max_points": 10,
-                    "hint": "Area = length × width.",
-                    "rubric_solution": "1. Formula: Area = length × width. 2. Calculation: 8 × 5 = 40. 3. Final: 40 cm²."
-                }
-            ]
-        },
-        {
-            "id": "fractions-basics",
-            "title": "Fractions: Operations & Steps",
-            "description": "Adding fractions with unequal denominators and simple multiplications.",
-            "icon": "🍰",
-            "difficulty": "Beginner",
-            "questions": [
-                {
-                    "id": "frac-q1",
-                    "order_index": 1,
-                    "prompt": "Compute 1/3 + 1/6. Show your common denominator and simplify your final answer.",
-                    "topic": "Fraction Addition",
-                    "max_points": 10,
-                    "hint": "Find the least common denominator between 3 and 6.",
-                    "rubric_solution": "1. Common denominator is 6: 1/3 = 2/6. 2. Add: 2/6 + 1/6 = 3/6. 3. Simplify: 3/6 = 1/2."
-                },
-                {
-                    "id": "frac-q2",
-                    "order_index": 2,
-                    "prompt": "Calculate 3/4 × 2/5. Express your final answer in simplest form.",
-                    "topic": "Fraction Multiplication",
-                    "max_points": 10,
-                    "hint": "Multiply numerators together and denominators together.",
-                    "rubric_solution": "1. Multiply numerators: 3 × 2 = 6. 2. Multiply denominators: 4 × 5 = 20. 3. Simplify: 6/20 = 3/10."
-                }
-            ]
-        },
-        {
-            "id": "algebra-linear",
-            "title": "Algebra: Linear Equations",
-            "description": "Isolating variables, inverse operations, and algebraic balancing.",
-            "icon": "⚡",
-            "difficulty": "Advanced",
-            "questions": [
-                {
-                    "id": "alg-q1",
-                    "order_index": 1,
-                    "prompt": "Solve for x: 3x + 7 = 22. Show both steps clearly on the scratchpad.",
-                    "topic": "Two-Step Equations",
-                    "max_points": 10,
-                    "hint": "Subtract 7 from both sides first, then divide by 3.",
-                    "rubric_solution": "1. Subtract 7 from both sides: 3x = 22 - 7 => 3x = 15. 2. Divide by 3: x = 15 / 3 = 5. Final: x = 5."
-                },
-                {
-                    "id": "alg-q2",
-                    "order_index": 2,
-                    "prompt": "Solve for y: 2(y - 4) = 14.",
-                    "topic": "Distributive Property",
-                    "max_points": 10,
-                    "hint": "Distribute the 2 across parentheses, or divide both sides by 2 first.",
-                    "rubric_solution": "1. Method A: 2y - 8 = 14 => 2y = 22 => y = 11. (Or Method B: y - 4 = 7 => y = 11). Final: y = 11."
-                }
-            ]
-        },
         {
             "id": "algebra-systems",
             "title": "Grade 8: Systems of Linear Equations",
@@ -479,4 +311,146 @@ def seed_default_assignments() -> None:
             ]
         }
     ]
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for t in topics_seed:
+            cursor.execute("""
+                INSERT OR REPLACE INTO topics (id, title, description, icon, difficulty, question_count)
+                VALUES (?, ?, ?, ?, ?, ?);
+            """, (t["id"], t["title"], t["description"], t["icon"], t["difficulty"], len(t["questions"])))
+
+            for q in t["questions"]:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO questions (id, topic_id, order_index, prompt, topic, max_points, hint, rubric_solution)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """, (q["id"], t["id"], q["order_index"], q["prompt"], q["topic"], q["max_points"], q["hint"], q["rubric_solution"]))
+
+        conn.commit()
+
+
+# ---- Query Utilities ----
+
+def fetch_all_topics() -> List[Dict[str, Any]]:
+    """Fetch all available topics from the catalog."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM topics ORDER BY rowid ASC;")
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+
+def fetch_questions_by_topic(topic_id: str) -> List[Dict[str, Any]]:
+    """Fetch all ordered questions belonging to a given topic."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, topic_id, order_index, prompt, topic, max_points, hint FROM questions WHERE topic_id = ? ORDER BY order_index ASC;",
+            (topic_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def fetch_question_rubric(question_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve full question details including expected rubric solution."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM questions WHERE id = ?;", (question_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def insert_attempt(attempt_id: str, topic_id: str, max_score: int) -> None:
+    """Record creation of a new student quiz attempt."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        now_iso = datetime.utcnow().isoformat()
+        cursor.execute("""
+            INSERT INTO attempts (id, topic_id, total_score, max_score, completed, created_at)
+            VALUES (?, ?, 0, ?, 0, ?);
+        """, (attempt_id, topic_id, max_score, now_iso))
+        conn.commit()
+
+
+def fetch_attempt(attempt_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve attempt header record."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM attempts WHERE id = ?;", (attempt_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def upsert_evaluation(
+    eval_id: str,
+    attempt_id: str,
+    question_id: str,
+    image_data: str,
+    status: str,
+    max_points: int,
+    score: int = 0,
+    transcription: Optional[str] = None,
+    step_analysis: Optional[List[Dict[str, Any]]] = None,
+    suggestions: Optional[str] = None
+) -> None:
+    """Insert or update a per-question evaluation record."""
+    now_iso = datetime.utcnow().isoformat()
+    steps_json = json.dumps(step_analysis or [])
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO evaluations (
+                id, attempt_id, question_id, image_data, status, score, max_points,
+                transcription, step_analysis, suggestions, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                score = excluded.score,
+                transcription = excluded.transcription,
+                step_analysis = excluded.step_analysis,
+                suggestions = excluded.suggestions,
+                updated_at = excluded.updated_at;
+        """, (
+            eval_id, attempt_id, question_id, image_data, status, score, max_points,
+            transcription, steps_json, suggestions, now_iso, now_iso
+        ))
+        conn.commit()
+
+
+def fetch_evaluations_for_attempt(attempt_id: str) -> List[Dict[str, Any]]:
+    """Retrieve all evaluations associated with an attempt."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, attempt_id, question_id, status, score, max_points,
+                   transcription, step_analysis, suggestions, image_data
+            FROM evaluations
+            WHERE attempt_id = ?;
+        """, (attempt_id,))
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["step_analysis"] = json.loads(item["step_analysis"]) if item["step_analysis"] else []
+            except Exception:
+                item["step_analysis"] = []
+            result.append(item)
+        return result
+
+
+def complete_attempt(attempt_id: str, total_score: int) -> None:
+    """Mark an attempt as completed and record the final combined score."""
+    now_iso = datetime.utcnow().isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE attempts
+            SET completed = 1, total_score = ?, completed_at = ?
+            WHERE id = ?;
+        """, (total_score, now_iso, attempt_id))
+        conn.commit()
+
 

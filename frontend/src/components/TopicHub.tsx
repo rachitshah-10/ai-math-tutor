@@ -14,6 +14,18 @@ export const TopicHub: React.FC<TopicHubProps> = ({
   onSelectTopic,
   onReviewPastAttempt,
 }) => {
+  const [levelFilter, setLevelFilter] = React.useState<'all' | 'high' | 'foundations'>('all');
+
+  const highSchoolCount = topics.filter((t) => t.difficulty.toLowerCase().includes('grade')).length;
+  const foundationsCount = topics.length - highSchoolCount;
+
+  const filteredTopics = topics.filter((t) => {
+    const isHigh = t.difficulty.toLowerCase().includes('grade');
+    if (levelFilter === 'high') return isHigh;
+    if (levelFilter === 'foundations') return !isHigh;
+    return true;
+  });
+
   return (
     <div>
       <div className="hero-banner">
@@ -24,16 +36,38 @@ export const TopicHub: React.FC<TopicHubProps> = ({
         </p>
       </div>
 
+      <div className="filter-tabs">
+        <button
+          className={`filter-btn ${levelFilter === 'all' ? 'active' : ''}`}
+          onClick={() => setLevelFilter('all')}
+        >
+          All Topics ({topics.length})
+        </button>
+        <button
+          className={`filter-btn ${levelFilter === 'high' ? 'active' : ''}`}
+          onClick={() => setLevelFilter('high')}
+        >
+          ⚡ Grades 8–10 ({highSchoolCount})
+        </button>
+        <button
+          className={`filter-btn ${levelFilter === 'foundations' ? 'active' : ''}`}
+          onClick={() => setLevelFilter('foundations')}
+        >
+          🌱 Foundations ({foundationsCount})
+        </button>
+      </div>
+
       <div className="topic-grid">
-        {topics.map((topic) => {
+        {filteredTopics.map((topic) => {
           const pastScore = pastScores[topic.id];
+          const diffClass = `diff-${topic.difficulty.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
           return (
             <div key={topic.id} className="topic-card">
               <div>
                 <div className="topic-header">
                   <div className="topic-icon">{topic.icon}</div>
-                  <span className={`difficulty-pill diff-${topic.difficulty}`}>
+                  <span className={`difficulty-pill ${diffClass}`}>
                     {topic.difficulty}
                   </span>
                 </div>

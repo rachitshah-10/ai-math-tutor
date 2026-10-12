@@ -361,6 +361,112 @@ def _grade_heuristic_mock(
             "suggestions": "Solid calculation! Remember to keep equal signs neatly aligned down the page."
         }
 
+    if "system" in lower_topic or "elimination" in lower_topic or "substitution" in lower_topic:
+        return {
+            "score": 10,
+            "max_points": max_points,
+            "transcription": "2x + y = 9\n3x - y = 16\n------------------\n5x = 25  =>  x = 5\n2(5) + y = 9  =>  10 + y = 9  =>  y = -1\nSolution: (5, -1)",
+            "step_analysis": [
+                {
+                    "step_number": 1,
+                    "description": "Linear Combination & Elimination",
+                    "status": "correct",
+                    "notes": "Added the two equations together to eliminate variable y, yielding 5x = 25."
+                },
+                {
+                    "step_number": 2,
+                    "description": "Solve for Primary Variable",
+                    "status": "correct",
+                    "notes": "Isolated x = 5 with clean division."
+                },
+                {
+                    "step_number": 3,
+                    "description": "Back-Substitution for Second Variable",
+                    "status": "correct",
+                    "notes": "Substituted x = 5 into 2x + y = 9 to correctly solve for y = -1."
+                }
+            ],
+            "suggestions": "Excellent multi-step algebraic flow! Writing the solution as an ordered pair (5, -1) was very clear."
+        }
+
+    if "quadratic" in lower_topic or "factor" in lower_topic or "squares" in lower_topic:
+        return {
+            "score": 10,
+            "max_points": max_points,
+            "transcription": "x² - 5x + 6 = 0\n(x - 2)(x - 3) = 0\nx - 2 = 0  =>  x = 2\nx - 3 = 0  =>  x = 3",
+            "step_analysis": [
+                {
+                    "step_number": 1,
+                    "description": "Binomial Factoring",
+                    "status": "correct",
+                    "notes": "Accurately factored quadratic trinomial into (x - 2)(x - 3)."
+                },
+                {
+                    "step_number": 2,
+                    "description": "Zero Product Property",
+                    "status": "correct",
+                    "notes": "Set each factor independently equal to zero."
+                },
+                {
+                    "step_number": 3,
+                    "description": "Root Identification",
+                    "status": "correct",
+                    "notes": "Found both roots x = 2 and x = 3 without signs errors."
+                }
+            ],
+            "suggestions": "Spotless factoring! Setting each binomial equal to 0 shows strong conceptual grounding in algebra."
+        }
+
+    if "trig" in lower_topic or "elevation" in lower_topic or "sohcahtoa" in lower_topic:
+        return {
+            "score": 10,
+            "max_points": max_points,
+            "transcription": "sin(θ) = Opposite / Hypotenuse\nsin(θ) = 6 / 10 = 3/5\nadj² + 6² = 10²\nadj² = 100 - 36 = 64\nadj = √64 = 8 cm",
+            "step_analysis": [
+                {
+                    "step_number": 1,
+                    "description": "Trigonometric Ratio Definition",
+                    "status": "correct",
+                    "notes": "Correctly applied sin(θ) = Opp/Hyp and simplified 6/10 to 3/5."
+                },
+                {
+                    "step_number": 2,
+                    "description": "Pythagorean Theorem Setup",
+                    "status": "correct",
+                    "notes": "Formulated adj² + 6² = 10² to determine adjacent side."
+                },
+                {
+                    "step_number": 3,
+                    "description": "Calculation and Units",
+                    "status": "correct",
+                    "notes": "Calculated √64 = 8 cm with proper measurement units."
+                }
+            ],
+            "suggestions": "Masterful trigonometry work! Your geometric sketch and formula notation were effortless to read."
+        }
+
+    if "slope" in lower_topic or "midpoint" in lower_topic or "analytic" in lower_topic or "line" in lower_topic:
+        return {
+            "score": 10,
+            "max_points": max_points,
+            "transcription": "m = (11 - 3) / (8 - 2) = 8 / 6 = 4/3\nMidpoint M = ((2 + 8)/2, (3 + 11)/2) = (10/2, 14/2) = (5, 7)",
+            "step_analysis": [
+                {
+                    "step_number": 1,
+                    "description": "Slope Formula Calculation",
+                    "status": "correct",
+                    "notes": "Computed change in y over change in x: (11 - 3)/(8 - 2) = 4/3."
+                },
+                {
+                    "step_number": 2,
+                    "description": "Midpoint Coordinate Averaging",
+                    "status": "correct",
+                    "notes": "Averaged x-coordinates and y-coordinates to determine M(5, 7)."
+                }
+            ],
+            "suggestions": "Great analytic geometry reasoning! Neatly organizing coordinates beforehand prevents calculation slips."
+        }
+
     # General / Algebra fallback
     return {
         "score": 10,
