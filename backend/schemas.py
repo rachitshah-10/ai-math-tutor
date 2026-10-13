@@ -28,9 +28,37 @@ class TopicSchema(BaseModel):
     question_count: int
 
 
+class RegisterRequest(BaseModel):
+    """Payload for student registration."""
+    email: str = Field(..., description="Student email address")
+    password: str = Field(..., min_length=4, description="Student password")
+    name: str = Field(..., min_length=1, description="Student display name")
+
+
+class LoginRequest(BaseModel):
+    """Payload for student login."""
+    email: str = Field(..., description="Student email address")
+    password: str = Field(..., description="Student password")
+
+
+class UserResponse(BaseModel):
+    """Public student user representation."""
+    id: str
+    email: str
+    name: str
+    created_at: str
+
+
+class AuthResponse(BaseModel):
+    """Response returned upon successful authentication."""
+    token: str
+    user: UserResponse
+
+
 class CreateAttemptRequest(BaseModel):
     """Request payload to initiate a new assignment attempt."""
     topic_id: str = Field(..., description="Target topic ID to begin")
+    user_id: Optional[str] = Field(None, description="Optional associated student user ID")
 
 
 class SubmitQuestionRequest(BaseModel):

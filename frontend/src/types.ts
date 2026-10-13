@@ -63,3 +63,31 @@ export interface PastScore {
   attemptId: string;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface UserAttemptHistory {
+  id: string;
+  topic_id: string;
+  user_id: string;
+  total_score: number;
+  max_score: number;
+  completed: boolean;
+  created_at: string;
+  completed_at?: string;
+  topic_title: string;
+  topic_icon: string;
+  topic_difficulty: string;
+  percentage: number;
+}
+
+

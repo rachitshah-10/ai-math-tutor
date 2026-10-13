@@ -4,12 +4,14 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Topic, Question, EvaluationItem, PastScore } from './types';
+import { Topic, Question, EvaluationItem, PastScore, User } from './types';
 import * as api from './services/api';
 import { TopicHub } from './components/TopicHub';
 import { Scratchpad } from './components/Scratchpad';
 import { GradingOverlay } from './components/GradingOverlay';
 import { ResultsView } from './components/ResultsView';
+import { AuthModal } from './components/AuthModal';
+import { HistoryModal } from './components/HistoryModal';
 
 type AppView = 'hub' | 'scratchpad' | 'evaluating' | 'results';
 
@@ -22,6 +24,11 @@ export const App: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [activeQuestionIndex, setActiveQuestionIndex] = useState<number>(0);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+
+  // User & Authentication State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
 
   // Evaluation & Results State
   const [completedEvalsCount, setCompletedEvalsCount] = useState<number>(0);
@@ -40,12 +47,7 @@ export const App: React.FC = () => {
     }
   });
 
-  // Load topics and sync past scores with backend on mount
-  useEffect(() => {
-    api.getTopics()
-      .then(setTopics)
-      .catch((err) => console.error('Failed to load topics:', err));
-
+  const syncScores = useCallback(() => {
     api.getPastScores()
       .then((serverScores) => {
         setPastScores(serverScores);
@@ -54,13 +56,35 @@ export const App: React.FC = () => {
       .catch((err) => console.error('Failed to sync past scores with backend:', err));
   }, []);
 
+  // Load topics, session, and sync scores on mount
+  useEffect(() => {
+    api.getTopics()
+      .then(setTopics)
+      .catch((err) => console.error('Failed to load topics:', err));
+
+    if (api.getAuthToken()) {
+      api.getMe()
+        .then(setCurrentUser)
+        .catch(() => api.setAuthToken(null));
+    }
+
+    syncScores();
+  }, [syncScores]);
+
+  // Handle logout
+  const handleLogout = async () => {
+    await api.logout();
+    setCurrentUser(null);
+    syncScores();
+  };
+
   // Start new assignment
   const handleSelectTopic = async (topic: Topic) => {
     try {
       setActiveTopic(topic);
       const [fetchedQuestions, attemptData] = await Promise.all([
         api.getTopicQuestions(topic.id),
-        api.startAttempt(topic.id),
+        api.startAttempt(topic.id, currentUser?.id),
       ]);
 
       setQuestions(fetchedQuestions);
@@ -202,11 +226,59 @@ export const App: React.FC = () => {
           </div>
         </div>
 
-        {view !== 'hub' && (
-          <button className="btn btn-secondary" onClick={() => setView('hub')} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
-            ← Topic Hub
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {currentUser ? (
+            <>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setIsHistoryModalOpen(true)}
+                style={{ padding: '7px 14px', fontSize: '0.85rem' }}
+                title="View all your past completed quizzes"
+              >
+                📜 My History
+              </button>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '5px 14px',
+                  background: 'var(--accent-soft)',
+                  border: '1px solid rgba(229, 176, 120, 0.3)',
+                  borderRadius: 999,
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  color: 'var(--accent)',
+                }}
+              >
+                <span>👤</span>
+                <span>{currentUser.name}</span>
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={handleLogout}
+                style={{ padding: '6px 12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}
+                title="Sign out"
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <button
+              className="btn btn-primary"
+              onClick={() => setIsAuthModalOpen(true)}
+              style={{ padding: '7px 16px', fontSize: '0.85rem' }}
+            >
+              👤 Sign In / Register
+            </button>
+          )}
+
+          {view !== 'hub' && (
+            <button className="btn btn-secondary" onClick={() => setView('hub')} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
+              ← Topic Hub
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="main-content">
@@ -248,6 +320,26 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={(user) => {
+          setCurrentUser(user);
+          syncScores();
+        }}
+      />
+
+      {/* History Modal */}
+      {currentUser && (
+        <HistoryModal
+          isOpen={isHistoryModalOpen}
+          user={currentUser}
+          onClose={() => setIsHistoryModalOpen(false)}
+          onSelectAttemptForReview={handleReviewPastAttempt}
+        />
+      )}
     </>
   );
 };

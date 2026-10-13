@@ -6,6 +6,9 @@ Encapsulates table creation, initial data seeding, and transactional query opera
 import json
 import sqlite3
 import os
+import hashlib
+import secrets
+import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 
@@ -29,6 +32,27 @@ def initialize_database() -> None:
     """
     with get_connection() as conn:
         cursor = conn.cursor()
+
+        # Users table (students)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+        """)
+
+        # Active student auth sessions
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            );
+        """)
 
         # Topics catalog
         cursor.execute("""
@@ -62,14 +86,22 @@ def initialize_database() -> None:
             CREATE TABLE IF NOT EXISTS attempts (
                 id TEXT PRIMARY KEY,
                 topic_id TEXT NOT NULL,
+                user_id TEXT,
                 total_score INTEGER DEFAULT 0,
                 max_score INTEGER DEFAULT 0,
                 completed INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL,
                 completed_at TEXT,
-                FOREIGN KEY (topic_id) REFERENCES topics (id)
+                FOREIGN KEY (topic_id) REFERENCES topics (id),
+                FOREIGN KEY (user_id) REFERENCES users (id)
             );
         """)
+
+        # Migrate user_id column if attempts table was created previously without it
+        try:
+            cursor.execute("ALTER TABLE attempts ADD COLUMN user_id TEXT REFERENCES users(id);")
+        except sqlite3.OperationalError:
+            pass
 
         # Per-question student submissions and AI evaluations
         cursor.execute("""
@@ -93,8 +125,9 @@ def initialize_database() -> None:
 
         conn.commit()
 
-    # Seed pre-populated assignments
+    # Seed pre-populated assignments and demo student
     seed_default_assignments()
+    seed_demo_user()
 
 
 def seed_default_assignments() -> None:
@@ -360,15 +393,15 @@ def fetch_question_rubric(question_id: str) -> Optional[Dict[str, Any]]:
         return dict(row) if row else None
 
 
-def insert_attempt(attempt_id: str, topic_id: str, max_score: int) -> None:
+def insert_attempt(attempt_id: str, topic_id: str, max_score: int, user_id: Optional[str] = None) -> None:
     """Record creation of a new student quiz attempt."""
     with get_connection() as conn:
         cursor = conn.cursor()
         now_iso = datetime.utcnow().isoformat()
         cursor.execute("""
-            INSERT INTO attempts (id, topic_id, total_score, max_score, completed, created_at)
-            VALUES (?, ?, 0, ?, 0, ?);
-        """, (attempt_id, topic_id, max_score, now_iso))
+            INSERT INTO attempts (id, topic_id, user_id, total_score, max_score, completed, created_at)
+            VALUES (?, ?, ?, 0, ?, 0, ?);
+        """, (attempt_id, topic_id, user_id, max_score, now_iso))
         conn.commit()
 
 
@@ -472,16 +505,24 @@ def clear_all_attempts() -> Dict[str, int]:
         }
 
 
-def fetch_completed_attempts_summary() -> Dict[str, Dict[str, Any]]:
-    """Return dictionary of latest completed attempt per topic."""
+def fetch_completed_attempts_summary(user_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    """Return dictionary of latest completed attempt per topic for a user (or global)."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT id, topic_id, total_score, max_score, completed
-            FROM attempts
-            WHERE completed = 1
-            ORDER BY rowid DESC;
-        """)
+        if user_id:
+            cursor.execute("""
+                SELECT id, topic_id, total_score, max_score, completed
+                FROM attempts
+                WHERE completed = 1 AND user_id = ?
+                ORDER BY rowid DESC;
+            """, (user_id,))
+        else:
+            cursor.execute("""
+                SELECT id, topic_id, total_score, max_score, completed
+                FROM attempts
+                WHERE completed = 1
+                ORDER BY rowid DESC;
+            """)
         rows = cursor.fetchall()
         summary = {}
         for r in rows:
@@ -498,6 +539,166 @@ def fetch_completed_attempts_summary() -> Dict[str, Dict[str, Any]]:
                     "percentage": percentage
                 }
         return summary
+
+
+# ---- Student Authentication & User Management ----
+
+def hash_password(password: str, salt: Optional[str] = None) -> str:
+    """Hash password using standard PBKDF2-HMAC-SHA256 with cryptographic salt."""
+    if not salt:
+        salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+    return f"{salt}${key.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify raw password against stored salt$hash in constant time."""
+    try:
+        salt, key_hex = stored_hash.split("$", 1)
+        test_key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 100000)
+        return secrets.compare_digest(test_key.hex(), key_hex)
+    except Exception:
+        return False
+
+
+def create_user(email: str, password: str, name: str) -> Dict[str, Any]:
+    """Register a new student user."""
+    clean_email = email.strip().lower()
+    user_id = str(uuid.uuid4())
+    pw_hash = hash_password(password)
+    now_iso = datetime.utcnow().isoformat()
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE email = ?;", (clean_email,))
+        if cursor.fetchone():
+            raise ValueError("An account with this email already exists.")
+
+        cursor.execute("""
+            INSERT INTO users (id, email, password_hash, name, created_at)
+            VALUES (?, ?, ?, ?, ?);
+        """, (user_id, clean_email, pw_hash, name.strip(), now_iso))
+        conn.commit()
+
+    return {
+        "id": user_id,
+        "email": clean_email,
+        "name": name.strip(),
+        "created_at": now_iso
+    }
+
+
+def authenticate_user(email: str, password: str) -> Optional[Dict[str, Any]]:
+    """Verify student credentials and return user record if valid."""
+    clean_email = email.strip().lower()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE email = ?;", (clean_email,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        user = dict(row)
+        if not verify_password(password, user["password_hash"]):
+            return None
+
+        return {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"],
+            "created_at": user["created_at"]
+        }
+
+
+def create_session(user_id: str) -> str:
+    """Generate and persist an authentication token for a student session."""
+    token = secrets.token_hex(32)
+    now_iso = datetime.utcnow().isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO sessions (token, user_id, created_at)
+            VALUES (?, ?, ?);
+        """, (token, user_id, now_iso))
+        conn.commit()
+    return token
+
+
+def get_user_by_token(token: str) -> Optional[Dict[str, Any]]:
+    """Retrieve authenticated user associated with session token."""
+    if not token:
+        return None
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT u.id, u.email, u.name, u.created_at
+            FROM sessions s
+            JOIN users u ON s.user_id = u.id
+            WHERE s.token = ?;
+        """, (token,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def delete_session(token: str) -> None:
+    """Invalidate student session token upon logout."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sessions WHERE token = ?;", (token,))
+        conn.commit()
+
+
+def fetch_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve public profile for user by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, email, name, created_at FROM users WHERE id = ?;", (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def fetch_user_attempts(user_id: str) -> List[Dict[str, Any]]:
+    """Retrieve full chronological attempt history for a specific student."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT a.id, a.topic_id, a.user_id, a.total_score, a.max_score, a.completed,
+                   a.created_at, a.completed_at,
+                   t.title as topic_title, t.icon as topic_icon, t.difficulty as topic_difficulty
+            FROM attempts a
+            LEFT JOIN topics t ON a.topic_id = t.id
+            WHERE a.user_id = ?
+            ORDER BY a.rowid DESC;
+        """, (user_id,))
+        rows = cursor.fetchall()
+        result = []
+        for r in rows:
+            item = dict(r)
+            max_s = item["max_score"]
+            tot_s = item["total_score"]
+            item["percentage"] = round((tot_s / max_s * 100), 1) if max_s > 0 else 0
+            result.append(item)
+        return result
+
+
+def seed_demo_user() -> None:
+    """Seed demo student account for instant testing without manual registration."""
+    demo_email = "alex@inkmath.edu"
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users WHERE email = ?;", (demo_email,))
+        if cursor.fetchone():
+            return
+
+        user_id = "demo-student-alex"
+        pw_hash = hash_password("password123")
+        now_iso = datetime.utcnow().isoformat()
+        cursor.execute("""
+            INSERT OR REPLACE INTO users (id, email, password_hash, name, created_at)
+            VALUES (?, ?, ?, ?, ?);
+        """, (user_id, demo_email, pw_hash, "Alex Rivera", now_iso))
+        conn.commit()
+
 
 
 

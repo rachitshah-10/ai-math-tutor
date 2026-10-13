@@ -6,9 +6,9 @@ canvas image submissions, and background evaluation queries.
 
 import uuid
 from contextlib import asynccontextmanager
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import logging
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -55,6 +55,74 @@ app.add_middleware(
 )
 
 
+# ---- Authentication Helpers ----
+
+async def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[Dict[str, Any]]:
+    """Resolve authenticated user from Bearer header if present."""
+    if not authorization:
+        return None
+    token = authorization.replace("Bearer ", "").strip()
+    return database.get_user_by_token(token)
+
+
+async def require_current_user(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
+    """Strict dependency requiring authenticated student."""
+    user = await get_current_user(authorization)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please log in."
+        )
+    return user
+
+
+# ---- Auth Endpoints ----
+
+@app.post("/api/auth/register", response_model=schemas.AuthResponse)
+async def register(payload: schemas.RegisterRequest):
+    """Register a new student account."""
+    try:
+        user = database.create_user(payload.email, payload.password, payload.name)
+        token = database.create_session(user["id"])
+        return {"token": token, "user": user}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@app.post("/api/auth/login", response_model=schemas.AuthResponse)
+async def login(payload: schemas.LoginRequest):
+    """Log in an existing student."""
+    user = database.authenticate_user(payload.email, payload.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password."
+        )
+    token = database.create_session(user["id"])
+    return {"token": token, "user": user}
+
+
+@app.get("/api/auth/me", response_model=schemas.UserResponse)
+async def get_me(user: Dict[str, Any] = Depends(require_current_user)):
+    """Retrieve profile of currently authenticated student."""
+    return user
+
+
+@app.post("/api/auth/logout")
+async def logout(authorization: Optional[str] = Header(None)):
+    """Log out student and invalidate current session token."""
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+        database.delete_session(token)
+    return {"status": "ok", "message": "Successfully logged out."}
+
+
+@app.get("/api/user/attempts")
+async def get_user_attempts(user: Dict[str, Any] = Depends(require_current_user)):
+    """Retrieve past quiz attempt history for the authenticated student."""
+    return database.fetch_user_attempts(user["id"])
+
+
 @app.get("/api/health")
 async def health_check() -> Dict[str, str]:
     """Health status endpoint."""
@@ -81,7 +149,7 @@ async def get_topic_questions(topic_id: str):
 
 
 @app.post("/api/attempts")
-async def create_attempt(payload: schemas.CreateAttemptRequest):
+async def create_attempt(payload: schemas.CreateAttemptRequest, authorization: Optional[str] = Header(None)):
     """
     Initialize a new assignment attempt for a topic.
     Returns attempt ID and total potential points.
@@ -93,25 +161,31 @@ async def create_attempt(payload: schemas.CreateAttemptRequest):
             detail=f"Topic '{payload.topic_id}' has no questions to start."
         )
 
+    user = await get_current_user(authorization)
+    user_id = user["id"] if user else payload.user_id
+
     attempt_id = str(uuid.uuid4())
     max_score = sum(q["max_points"] for q in questions)
-    database.insert_attempt(attempt_id, payload.topic_id, max_score)
+    database.insert_attempt(attempt_id, payload.topic_id, max_score, user_id=user_id)
 
     return {
         "attempt_id": attempt_id,
         "topic_id": payload.topic_id,
+        "user_id": user_id,
         "max_score": max_score,
         "question_count": len(questions)
     }
 
 
 @app.get("/api/attempts")
-async def list_attempts_summary():
+async def list_attempts_summary(authorization: Optional[str] = Header(None)):
     """
     Retrieve completed attempt summary mapped by topic_id.
-    Synchronizes client-side UI with true database state.
+    Synchronizes client-side UI with user or true database state.
     """
-    return database.fetch_completed_attempts_summary()
+    user = await get_current_user(authorization)
+    user_id = user["id"] if user else None
+    return database.fetch_completed_attempts_summary(user_id=user_id)
 
 
 @app.get("/api/attempts/{attempt_id}")
