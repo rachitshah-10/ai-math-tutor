@@ -18,6 +18,9 @@ interface ScratchpadProps {
 
 type Tool = 'pen' | 'eraser';
 
+const ERASER_WIDTH = 32;
+const ERASER_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%23e5b078' stroke-width='2' stroke-dasharray='4 3'/%3E%3C/svg%3E") 16 16, cell`;
+
 interface StrokePoint {
   x: number;
   y: number;
@@ -110,8 +113,10 @@ export const Scratchpad: React.FC<ScratchpadProps> = ({
       ctx.lineWidth = stroke.width;
 
       if (stroke.tool === 'eraser') {
-        ctx.strokeStyle = '#ffffff';
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
       } else {
+        ctx.globalCompositeOperation = 'source-over';
         ctx.strokeStyle = stroke.color;
       }
 
@@ -121,6 +126,7 @@ export const Scratchpad: React.FC<ScratchpadProps> = ({
       }
       ctx.stroke();
     }
+    ctx.globalCompositeOperation = 'source-over';
   };
 
   // Coordinate normalization for mouse and touch
@@ -157,11 +163,18 @@ export const Scratchpad: React.FC<ScratchpadProps> = ({
     const ctx = canvas?.getContext('2d');
     if (!ctx) return;
 
+    const currentWidth = currentTool === 'eraser' ? ERASER_WIDTH : strokeWidth;
     ctx.beginPath();
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.lineWidth = strokeWidth;
-    ctx.strokeStyle = currentTool === 'eraser' ? '#ffffff' : strokeColor;
+    ctx.lineWidth = currentWidth;
+    if (currentTool === 'eraser') {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
+    } else {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = strokeColor;
+    }
     ctx.moveTo(point.x, point.y);
   };
 
@@ -191,7 +204,7 @@ export const Scratchpad: React.FC<ScratchpadProps> = ({
       const newStroke: Stroke = {
         tool: currentTool,
         color: strokeColor,
-        width: strokeWidth,
+        width: currentTool === 'eraser' ? ERASER_WIDTH : strokeWidth,
         points: [...currentStrokeRef.current],
       };
       const updated = [...strokes, newStroke];
@@ -308,9 +321,13 @@ export const Scratchpad: React.FC<ScratchpadProps> = ({
           {[2, 4, 8].map((size) => (
             <button
               key={size}
-              className={`tool-btn ${strokeWidth === size ? 'active' : ''}`}
+              className={`tool-btn ${strokeWidth === size && currentTool === 'pen' ? 'active' : ''}`}
               style={{ padding: '4px 8px', fontSize: '0.8rem' }}
-              onClick={() => setStrokeWidth(size)}
+              onClick={() => {
+                setStrokeWidth(size);
+                setCurrentTool('pen');
+              }}
+              title={`Pen size: ${size === 2 ? 'Fine' : size === 4 ? 'Medium' : 'Bold'}`}
             >
               {size === 2 ? 'Fine' : size === 4 ? 'Med' : 'Bold'}
             </button>
@@ -328,7 +345,7 @@ export const Scratchpad: React.FC<ScratchpadProps> = ({
 
         <canvas
           ref={canvasRef}
-          style={{ width: '100%', height: '100%', touchAction: 'none', cursor: currentTool === 'eraser' ? 'cell' : 'crosshair' }}
+          style={{ width: '100%', height: '100%', touchAction: 'none', cursor: currentTool === 'eraser' ? ERASER_CURSOR : 'crosshair' }}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
