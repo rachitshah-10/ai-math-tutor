@@ -1,6 +1,7 @@
 /**
  * InkMath Main Application Component.
- * Orchestrates views: TopicHub -> Scratchpad -> Grading -> ResultsView.
+ * Orchestrates views: AuthGate -> TopicHub -> Scratchpad -> Grading -> ResultsView.
+ * Enforces strict authentication gating: redirects unauthenticated access and logouts to the Login Screen.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,7 +11,7 @@ import { TopicHub } from './components/TopicHub';
 import { Scratchpad } from './components/Scratchpad';
 import { GradingOverlay } from './components/GradingOverlay';
 import { ResultsView } from './components/ResultsView';
-import { AuthModal } from './components/AuthModal';
+import { AuthCard } from './components/AuthModal';
 import { HistoryModal } from './components/HistoryModal';
 
 type AppView = 'hub' | 'scratchpad' | 'evaluating' | 'results';
@@ -27,7 +28,7 @@ export const App: React.FC = () => {
 
   // User & Authentication State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
 
   // Evaluation & Results State
@@ -56,7 +57,7 @@ export const App: React.FC = () => {
       .catch((err) => console.error('Failed to sync past scores with backend:', err));
   }, []);
 
-  // Load topics, session, and sync scores on mount
+  // Initial load: verify session and fetch topics
   useEffect(() => {
     api.getTopics()
       .then(setTopics)
@@ -64,27 +65,47 @@ export const App: React.FC = () => {
 
     if (api.getAuthToken()) {
       api.getMe()
-        .then(setCurrentUser)
-        .catch(() => api.setAuthToken(null));
+        .then((user) => {
+          setCurrentUser(user);
+          syncScores();
+        })
+        .catch(() => {
+          api.setAuthToken(null);
+          setCurrentUser(null);
+        })
+        .finally(() => {
+          setIsCheckingAuth(false);
+        });
+    } else {
+      setIsCheckingAuth(false);
     }
-
-    syncScores();
   }, [syncScores]);
 
-  // Handle logout
+  // Handle logout: clear token, reset state, and redirect to login screen
   const handleLogout = async () => {
     await api.logout();
     setCurrentUser(null);
-    syncScores();
+    setActiveTopic(null);
+    setQuestions([]);
+    setAttemptId(null);
+    setView('hub');
+    setPastScores({});
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   };
 
   // Start new assignment
   const handleSelectTopic = async (topic: Topic) => {
+    if (!currentUser) return;
+
     try {
       setActiveTopic(topic);
       const [fetchedQuestions, attemptData] = await Promise.all([
         api.getTopicQuestions(topic.id),
-        api.startAttempt(topic.id, currentUser?.id),
+        api.startAttempt(topic.id, currentUser.id),
       ]);
 
       setQuestions(fetchedQuestions);
@@ -215,6 +236,96 @@ export const App: React.FC = () => {
     setPastScores({});
   };
 
+  // 1. Initial auth verification loading state
+  if (isCheckingAuth) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'var(--bg-main)',
+          gap: 16,
+        }}
+      >
+        <div style={{ fontSize: '2.5rem' }}>🖋️</div>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.9rem',
+            color: 'var(--accent)',
+            letterSpacing: 1.2,
+            textTransform: 'uppercase',
+          }}
+        >
+          Loading InkMath Atelier...
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Strict Auth Gate: Redirect to Login Screen if not authenticated
+  if (!currentUser) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'var(--bg-main)',
+        }}
+      >
+        <header className="app-header">
+          <div className="brand">
+            <div className="brand-icon">🖋️</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span className="brand-title">InkMath<span>.</span></span>
+              <span className="brand-badge">Atelier</span>
+            </div>
+          </div>
+          <div
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8rem',
+              color: 'var(--accent)',
+              background: 'var(--accent-soft)',
+              padding: '6px 14px',
+              borderRadius: 999,
+              border: '1px solid rgba(229, 176, 120, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>🔒</span>
+            <span>Sign In Required</span>
+          </div>
+        </header>
+
+        <main
+          style={{
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '40px 20px',
+          }}
+        >
+          <AuthCard
+            isStandalone={true}
+            onSuccess={(user) => {
+              setCurrentUser(user);
+              syncScores();
+            }}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // 3. Authenticated Application
   return (
     <>
       <header className="app-header">
@@ -227,51 +338,41 @@ export const App: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {currentUser ? (
-            <>
-              <button
-                className="btn btn-secondary"
-                onClick={() => setIsHistoryModalOpen(true)}
-                style={{ padding: '7px 14px', fontSize: '0.85rem' }}
-                title="View all your past completed quizzes"
-              >
-                📜 My History
-              </button>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '5px 14px',
-                  background: 'var(--accent-soft)',
-                  border: '1px solid rgba(229, 176, 120, 0.3)',
-                  borderRadius: 999,
-                  fontSize: '0.85rem',
-                  fontWeight: 700,
-                  color: 'var(--accent)',
-                }}
-              >
-                <span>👤</span>
-                <span>{currentUser.name}</span>
-              </div>
-              <button
-                className="btn btn-secondary"
-                onClick={handleLogout}
-                style={{ padding: '6px 12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}
-                title="Sign out"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <button
-              className="btn btn-primary"
-              onClick={() => setIsAuthModalOpen(true)}
-              style={{ padding: '7px 16px', fontSize: '0.85rem' }}
-            >
-              👤 Sign In / Register
-            </button>
-          )}
+          <button
+            className="btn btn-secondary"
+            onClick={() => setIsHistoryModalOpen(true)}
+            style={{ padding: '7px 14px', fontSize: '0.85rem' }}
+            title="View all your past completed quizzes"
+          >
+            📜 My History
+          </button>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '5px 14px',
+              background: 'var(--accent-soft)',
+              border: '1px solid rgba(229, 176, 120, 0.3)',
+              borderRadius: 999,
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              color: 'var(--accent)',
+            }}
+          >
+            <span>👤</span>
+            <span>{currentUser.name}</span>
+          </div>
+
+          <button
+            className="btn btn-secondary"
+            onClick={handleLogout}
+            style={{ padding: '6px 12px', fontSize: '0.82rem', color: 'var(--text-muted)' }}
+            title="Sign out and return to login screen"
+          >
+            Logout
+          </button>
 
           {view !== 'hub' && (
             <button className="btn btn-secondary" onClick={() => setView('hub')} style={{ padding: '6px 14px', fontSize: '0.85rem' }}>
@@ -321,26 +422,13 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Auth Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        onSuccess={(user) => {
-          setCurrentUser(user);
-          syncScores();
-        }}
-      />
-
       {/* History Modal */}
-      {currentUser && (
-        <HistoryModal
-          isOpen={isHistoryModalOpen}
-          user={currentUser}
-          onClose={() => setIsHistoryModalOpen(false)}
-          onSelectAttemptForReview={handleReviewPastAttempt}
-        />
-      )}
+      <HistoryModal
+        isOpen={isHistoryModalOpen}
+        user={currentUser}
+        onClose={() => setIsHistoryModalOpen(false)}
+        onSelectAttemptForReview={handleReviewPastAttempt}
+      />
     </>
   );
 };
-

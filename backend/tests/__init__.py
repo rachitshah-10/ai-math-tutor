@@ -1,0 +1,2 @@
+"""InkMath automated test suite."""
+

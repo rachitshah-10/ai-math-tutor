@@ -268,3 +268,4 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
     </div>
   );
 };
+
